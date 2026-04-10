@@ -46,6 +46,7 @@ Check for the presence of these files in `projects/<name>/`:
 | `pyproject.toml` or `setup.py` or `requirements.txt` | Python |
 | `Gemfile` or `*.gemspec` | Ruby |
 | `*.csproj` or `*.sln` | C# |
+| `pom.xml` or `build.gradle` or `build.gradle.kts` | Java / Kotlin |
 
 A repo may mix languages. Apply changes in all relevant language contexts.
 
@@ -56,6 +57,7 @@ A repo may mix languages. Apply changes in all relevant language contexts.
 - Python: `name` in `pyproject.toml` or `setup.py`
 - Ruby: gem name from `*.gemspec` or `Gemfile` project name
 - C#: `<AssemblyName>` or `<PackageId>` from `.csproj`
+- Java/Kotlin: `artifactId` from `pom.xml` or `rootProject.name` from `settings.gradle`
 
 Capitalize the library name sensibly for display (e.g. `langchain-mongodb` → `"Langchain"`, `beanie` → `"Beanie"`, `typeorm` → `"TypeORM"`). Check whether the existing codebase has a display-name constant already; if so, use it.
 
