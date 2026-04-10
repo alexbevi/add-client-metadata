@@ -70,15 +70,17 @@ if (!options.driverInfo) {
 
 ### Pattern B — Caller passes an existing client
 
-Call `appendMetadata` on the received client at the earliest lifecycle point (constructor body, `init()`, `connect()`, etc.):
+Call `appendMetadata` on the received client at the earliest lifecycle point (constructor body, `init()`, `connect()`, etc.). Always guard the call with a runtime availability check — `appendMetadata` was added in Node.js `mongodb` driver v6.18.0 and callers may be on an older version:
 
 ```typescript
 // in constructor or init method:
-this.client.appendMetadata({ name: 'LibraryName' });
+if (typeof this.client.appendMetadata === 'function') {
+  this.client.appendMetadata({ name: 'LibraryName' });
+}
 // version is optional here since the client was constructed externally
 ```
 
-`appendMetadata` is idempotent and safe to call multiple times; the driver deduplicates entries. It is available in Node.js `mongodb` driver ≥ 6.x.
+`appendMetadata` is idempotent and safe to call multiple times; the driver deduplicates entries.
 
 ### tsconfig.json change (if needed)
 
@@ -180,7 +182,7 @@ Define `_DRIVER_INFO` at module level, not inside the function, to avoid re-inst
 
 ### Pattern B — Caller passes an existing client
 
-Call `append_metadata` on the received client at the first point it is used:
+Call `append_metadata` on the received client at the first point it is used. Always guard the call with `hasattr` — `append_metadata` was added in PyMongo 4.14 and callers may be on an older version:
 
 ```python
 from pymongo.driver_info import DriverInfo
@@ -189,10 +191,11 @@ from importlib.metadata import version as get_version
 _DRIVER_INFO = DriverInfo(name="LibraryName", version=get_version("package-name"))
 
 # in __init__ or an init/connect method:
-client.append_metadata(_DRIVER_INFO)
+if hasattr(client, 'append_metadata'):
+    client.append_metadata(_DRIVER_INFO)
 ```
 
-`append_metadata` is available in PyMongo ≥ 4.14. The `DriverInfo` class is in `pymongo.driver_info` and available from PyMongo ≥ 4.0.
+`DriverInfo` is available from PyMongo ≥ 4.0. `append_metadata` was added in PyMongo ≥ 4.14.
 
 ### Testing (Python)
 
@@ -431,7 +434,8 @@ def __init__(self, client: MongoClient = None):
     if client is None:
         self._client = MongoClient(uri, driver=_DRIVER_INFO)  # Pattern A
     else:
-        client.append_metadata(_DRIVER_INFO)                   # Pattern B
+        if hasattr(client, 'append_metadata'):                 # Pattern B
+            client.append_metadata(_DRIVER_INFO)
         self._client = client
 ```
 
