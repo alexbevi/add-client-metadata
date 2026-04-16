@@ -17,7 +17,7 @@ Claude will clone the repo, detect the language, find all `MongoClient` construc
 ## What it does
 
 1. Clones the target repository
-2. Detects language (Python, JS/TS, Ruby, C#) from manifest files
+2. Detects language (Python, JS/TS, Ruby, C#, Java/Kotlin) from manifest files
 3. Identifies the library name and version
 4. Scans for `MongoClient` integration points:
    - **Pattern A** — library constructs the client: injects `driver=DriverInfo(...)` / `driverInfo: { name, version }` / `wrapping_libraries:` into the constructor call
@@ -32,6 +32,7 @@ Claude will clone the repo, detect the language, find all `MongoClient` construc
 | JavaScript / TypeScript | `driverInfo` option, or `appendMetadata()` | `mongodb` >= 6.x |
 | Ruby | `wrapping_libraries:` option | `mongo` >= 2.x |
 | C# | `MongoClientSettings.LibraryInfo` | driver >= 2.20.0 |
+| Java / Kotlin | `MongoDriverInformation` + `MongoClients.create()`, or `appendMetadata()` | Java driver >= 4.x / 5.6.0 |
 
 ## Installation
 
