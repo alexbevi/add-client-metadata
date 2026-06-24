@@ -4,7 +4,7 @@ description: >
   Add MongoDB driver handshake metadata to a third-party library that uses MongoClient.
   Use when the user invokes "add-client-metadata <repo-url>" or asks to add MongoDB client
   metadata, driver info, or handshake metadata to a library or GitHub repository.
-version: 0.2.0
+version: 0.2.1
 ---
 
 # Add MongoDB Client Metadata
@@ -78,17 +78,17 @@ Capitalize the library name sensibly for display (e.g. `langchain-mongodb` → `
 
 Use Grep to find all `MongoClient` construction and usage sites. Consult `references/language-patterns.md` for per-language grep patterns and file globs.
 
-For each hit, determine which integration pattern applies:
+For each hit, determine which integration approach applies:
 
-**Pattern A — Library constructs the client**
-The library calls `new MongoClient(...)` (or equivalent) directly. The URL / connection string is typically a library config value.
+**Library constructs the client** — The library calls `new MongoClient(...)` (or equivalent) directly. The URL / connection string is typically a library config value.
 → Inject `driverInfo` into the constructor call.
 
-**Pattern B — Caller passes an existing client**
-The library accepts a `MongoClient` instance as a parameter (function argument, constructor argument, or config field). The `new MongoClient` call lives in user code, outside this library.
+**Caller passes an existing client** — The library accepts a `MongoClient` instance as a parameter (function argument, constructor argument, or config field). The `new MongoClient` call lives in user code, outside this library.
 → Call the `appendMetadata` / `append_metadata` API on the received client instance, typically at the earliest point the client is used (e.g. in an `init`, `connect`, or `setup` method).
 
-A single library may have both patterns (e.g. it accepts an optional existing client but also creates one if none is provided). Handle both branches.
+A single library may use both approaches (e.g. it accepts an optional existing client but also creates one if none is provided). Handle both branches.
+
+> **Note:** "Pattern A" and "Pattern B" are internal shorthand used in this skill for clarity. Do not use this language in code comments, commit messages, or PR descriptions — it is jargon that means nothing to the library maintainer.
 
 ### Step 6 — Apply code changes
 
@@ -119,8 +119,8 @@ Add tests that verify the metadata is applied. Match the repo's existing test co
 Tests must cover at minimum:
 - The `driverInfo` / `DriverInfo` constant has the expected `name` field.
 - The client is constructed (or `appendMetadata` is called) with that constant.
-- A caller-supplied driver value is not overridden (Pattern A guard).
-- `append_metadata` / `appendMetadata` absence does not raise (Pattern B guard, if applicable).
+- A caller-supplied driver value is not overridden (guard for the library-constructs-client case).
+- `append_metadata` / `appendMetadata` absence does not raise (guard for the caller-supplied-client case, if applicable).
 
 Run the tests and fix any failures before committing. See `references/language-patterns.md` for per-language testing guidance.
 
@@ -169,7 +169,7 @@ feat: add MongoDB driver handshake metadata
 
 1. **Summary** — One paragraph explaining what the change does and why it matters. Frame it from the perspective of value to the maintainer and their users: server-side visibility, easier debugging, MongoDB Atlas integration.
 
-2. **What changes** — A brief description of each modified file and which pattern (A / B) was applied, including the guard strategy.
+2. **What changes** — A brief description of each modified file: whether the library constructs its own client (and `driverInfo` was injected into the constructor) or receives one from the caller (and `appendMetadata` was called), including the guard strategy. Do not use "Pattern A / B" terminology — describe the behaviour in plain terms.
 
 3. **How it appears in the logs** — Include a concrete sample of the handshake metadata document as it will appear in `mongod` diagnostic logs or `db.currentOp()`. Generate the actual JSON by constructing a no-connect client:
 
