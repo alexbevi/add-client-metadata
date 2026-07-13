@@ -4,7 +4,7 @@ description: >
   Add MongoDB driver handshake metadata to a third-party library that uses MongoClient.
   Use when the user invokes "add-client-metadata <repo-url>" or asks to add MongoDB client
   metadata, driver info, or handshake metadata to a library or GitHub repository.
-version: 0.2.1
+version: 0.3.0
 ---
 
 # Add MongoDB Client Metadata
@@ -58,6 +58,7 @@ Check for the presence of these files in `projects/<name>/`:
 | `Gemfile` or `*.gemspec` | Ruby |
 | `*.csproj` or `*.sln` | C# |
 | `pom.xml` or `build.gradle` or `build.gradle.kts` | Java / Kotlin |
+| `Cargo.toml` | Rust |
 
 A repo may mix languages. Apply changes in all relevant language contexts.
 
@@ -69,6 +70,7 @@ A repo may mix languages. Apply changes in all relevant language contexts.
 - Ruby: gem name from `*.gemspec` or `Gemfile` project name
 - C#: `<AssemblyName>` or `<PackageId>` from `.csproj`
 - Java/Kotlin: `artifactId` from `pom.xml` or `rootProject.name` from `settings.gradle`
+- Rust: `name` field in `Cargo.toml` under `[package]`
 
 Capitalize the library name sensibly for display (e.g. `langchain-mongodb` → `"Langchain"`, `beanie` → `"Beanie"`, `typeorm` → `"TypeORM"`). Check whether the existing codebase has a display-name constant already; if so, use it.
 
@@ -76,7 +78,7 @@ Capitalize the library name sensibly for display (e.g. `langchain-mongodb` → `
 
 ### Step 5 — Scan for MongoClient integration points
 
-Use Grep to find all `MongoClient` construction and usage sites. Consult `references/language-patterns.md` for per-language grep patterns and file globs.
+Use Grep to find all `MongoClient` construction and usage sites. Consult `references/language-patterns.md` for per-language grep patterns and file globs. For Rust, search for `ClientOptions::parse` and `Client::with_options`.
 
 For each hit, determine which integration approach applies:
 
@@ -182,6 +184,8 @@ feat: add MongoDB driver handshake metadata
    ```
 
    **JS/TS:** describe the `PyMongo|LibraryName` / `async|LibraryName` pattern and note the `driver.name` and `driver.version` fields in the handshake document.
+
+   **Rust:** describe the `driver_info` field on `ClientOptions` set via `DriverInfo::builder().name("LibraryName").build()`, and note that the handshake document will include the library name under the `driver` field alongside the `mongodb` Rust driver info.
 
 4. **Spec reference** — Link to the MongoDB handshake specification:
    ```

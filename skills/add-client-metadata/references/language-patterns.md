@@ -391,7 +391,7 @@ var client = new MongoClient(settings);
 
 ### Pattern B — Caller passes an existing client
 
-The C# driver does not expose a public `appendMetadata` API for existing client instances. Document this in code comments: metadata must be set at construction time via `MongoClientSettings.LibraryInfo`. Recommend callers configure this themselves, and optionally provide a helper:
+The C# driver does not expose a public `appendMetadata` API for existing client instances. `MongoClientSettings` is frozen by the driver on `new MongoClient(settings)`, so `client.Settings.LibraryInfo` throws after construction. Document this in code comments: metadata must be set at construction time via `MongoClientSettings.LibraryInfo`. Recommend callers configure this themselves, and optionally provide a helper:
 ```csharp
 /// <summary>
 /// Returns a <see cref="LibraryInfo"/> for use with <see cref="MongoClientSettings.LibraryInfo"/>
@@ -542,6 +542,124 @@ cd projects/<name>
 ./mvnw test        # Maven
 # or
 ./gradlew test     # Gradle
+```
+
+---
+
+## Rust
+
+### Grep patterns
+
+```
+# Find Client::with_options calls (client construction)
+pattern: Client::with_options\(
+glob: **/*.rs
+
+# Find ClientOptions::parse calls
+pattern: ClientOptions::parse
+glob: **/*.rs
+
+# Find driver_info (already set?)
+pattern: driver_info
+glob: **/*.rs
+```
+
+Exclude: `target/`, `**/tests/`, `*_test.rs` (check tests separately).
+
+### Version resolution
+
+Use the `env!` macro — resolved at compile time from `Cargo.toml`, always accurate:
+
+```rust
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+```
+
+### Pattern A — Library constructs the client
+
+The library calls `ClientOptions::parse` and `Client::with_options` itself.
+
+**Before:**
+```rust
+let mut options = ClientOptions::parse(uri).await?;
+let client = Client::with_options(options)?;
+```
+
+**After:**
+```rust
+use mongodb::options::{ClientOptions, DriverInfo};
+
+const DRIVER_NAME: &str = "LibraryName";
+
+pub async fn create_client(uri: &str) -> Result<Client, mongodb::error::Error> {
+    let mut options = ClientOptions::parse(uri).await?;
+    options.driver_info = Some(
+        DriverInfo::builder()
+            .name(DRIVER_NAME)
+            .version(env!("CARGO_PKG_VERSION"))
+            .build(),
+    );
+    Client::with_options(options)
+}
+```
+
+Define `DRIVER_NAME` as a module-level constant. `version` is optional but recommended when set via `env!`.
+
+### Pattern B — Caller passes an existing client
+
+The Rust mongodb driver has no post-construction metadata API — `driver_info` must be set on `ClientOptions` before `Client::with_options` is called. You cannot mutate a `Client` after construction.
+
+The correct approach is to expose a public helper so callers can build a properly-configured client:
+
+```rust
+use mongodb::options::{ClientOptions, DriverInfo};
+
+const DRIVER_NAME: &str = "LibraryName";
+
+/// Returns `ClientOptions` pre-configured with LibraryName driver metadata.
+/// Use this when constructing a [`mongodb::Client`] for use with this library.
+pub async fn client_options(uri: &str) -> Result<ClientOptions, mongodb::error::Error> {
+    let mut options = ClientOptions::parse(uri).await?;
+    options.driver_info = Some(
+        DriverInfo::builder()
+            .name(DRIVER_NAME)
+            .build(),
+    );
+    Ok(options)
+}
+```
+
+Callers then do:
+```rust
+let options = my_lib::client_options("mongodb://localhost").await?;
+let client = Client::with_options(options)?;
+```
+
+If the library already has a builder or init function, inject the `driver_info` assignment there rather than adding a standalone function.
+
+### Testing (Rust)
+
+Look under `tests/`, `src/` (inline `#[cfg(test)]` modules), or integration test files. Search for tests that call `ClientOptions::parse` or `Client::with_options`.
+
+Propose a test that verifies `driver_info` is set:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn client_options_sets_driver_info() {
+        let options = client_options("mongodb://localhost").await.unwrap();
+        let info = options.driver_info.expect("driver_info should be set");
+        assert_eq!(info.name, "LibraryName");
+    }
+}
+```
+
+**Local test run:**
+```bash
+cd projects/<name>
+cargo test
 ```
 
 ---
