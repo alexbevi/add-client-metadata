@@ -2,7 +2,7 @@
 
 A Claude Code plugin that adds MongoDB driver handshake metadata to third-party libraries that use `MongoClient`.
 
-When a library wraps PyMongo, the Node.js MongoDB driver, the Ruby Mongo driver, or the C# driver, MongoDB's server-side telemetry sees all traffic as generic driver connections. Adding `driverInfo` / `DriverInfo` / `wrapping_libraries` to the `MongoClient` construction surfaces the library's name and version in the handshake, enabling accurate server-side attribution.
+When a library wraps PyMongo, the Node.js MongoDB driver, the Ruby Mongo driver, the C# driver, or the Rust mongodb crate, MongoDB's server-side telemetry sees all traffic as generic driver connections. Adding `driverInfo` / `DriverInfo` / `wrapping_libraries` to the `MongoClient` construction surfaces the library's name and version in the handshake, enabling accurate server-side attribution.
 
 ## Usage
 
@@ -17,7 +17,7 @@ Claude will clone the repo, detect the language, find all `MongoClient` construc
 ## What it does
 
 1. Clones the target repository
-2. Detects language (Python, JS/TS, Ruby, C#, Java/Kotlin) from manifest files
+2. Detects language (Python, JS/TS, Ruby, C#, Java/Kotlin, Rust) from manifest files
 3. Identifies the library name and version
 4. Scans for `MongoClient` integration points:
    - **Pattern A** — library constructs the client: injects `driver=DriverInfo(...)` / `driverInfo: { name, version }` / `wrapping_libraries:` into the constructor call
@@ -33,6 +33,7 @@ Claude will clone the repo, detect the language, find all `MongoClient` construc
 | Ruby | `wrapping_libraries:` option | `mongo` >= 2.x |
 | C# | `MongoClientSettings.LibraryInfo` | driver >= 2.20.0 |
 | Java / Kotlin | `MongoDriverInformation` + `MongoClients.create()`, or `appendMetadata()` | Java driver >= 4.x / 5.6.0 |
+| Rust | `DriverInfo` on `ClientOptions`, exposed via a `client_options()` helper | `mongodb` crate >= 2.x |
 
 ## Installation
 
