@@ -129,6 +129,10 @@ npm test           # or the test script from package.json
 pattern: (MongoClient|AsyncMongoClient)\s*\(
 glob: **/*.py
 
+# Find Motor AsyncIOMotorClient (excluded from injection — see note below)
+pattern: AsyncIOMotorClient\s*\(
+glob: **/*.py
+
 # Find driver= kwarg (already set?)
 pattern: driver\s*=\s*DriverInfo
 glob: **/*.py
@@ -139,6 +143,8 @@ glob: **/*.py
 ```
 
 Exclude: `__pycache__/`, `.venv/`, `build/`, `dist/`, `tests/` (check tests separately).
+
+> **Motor exclusion**: `AsyncIOMotorClient` (from the `motor` package) does not accept a `driver=` parameter. Only inject on PyMongo's `MongoClient` and `AsyncMongoClient`. When a codebase uses both, check the import — `from motor.motor_asyncio import AsyncIOMotorClient` is Motor; `from pymongo import AsyncMongoClient` is PyMongo async.
 
 ### Version resolution
 
