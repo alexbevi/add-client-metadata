@@ -6,7 +6,7 @@ description: >
   metadata, driver info, or handshake metadata to a library or GitHub repository.
 argument-hint: <github-repo-url>
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob, WebFetch, AskUserQuestion
-version: 0.5.0
+version: 0.5.1
 ---
 
 # Add MongoDB Client Metadata
