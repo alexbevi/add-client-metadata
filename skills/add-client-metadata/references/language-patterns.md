@@ -36,7 +36,7 @@ import { version } from '../../package.json';
 
 If `tsconfig.json` does not already have `"resolveJsonModule": true`, add it to `compilerOptions`.
 
-### Pattern A — Library constructs the client
+### Library constructs the client
 
 **Before:**
 ```typescript
@@ -68,7 +68,7 @@ if (!options.driverInfo) {
 }
 ```
 
-### Pattern B — Caller passes an existing client
+### Caller passes an existing client
 
 Call `appendMetadata` on the received client at the earliest lifecycle point (constructor body, `init()`, `connect()`, etc.). Always guard the call with a runtime availability check — `appendMetadata` was added in Node.js `mongodb` driver v6.18.0 and callers may be on an older version:
 
@@ -163,7 +163,7 @@ except Exception:
     _VERSION = None
 ```
 
-### Pattern A — Library constructs the client
+### Library constructs the client
 
 **Before:**
 ```python
@@ -186,7 +186,7 @@ client = AsyncMongoClient(uri, driver=_DRIVER_INFO, **kwargs)
 
 Define `_DRIVER_INFO` at module level, not inside the function, to avoid re-instantiating it on every call.
 
-### Pattern B — Caller passes an existing client
+### Caller passes an existing client
 
 Call `append_metadata` on the received client at the first point it is used. Always guard the call with `hasattr` — `append_metadata` was added in PyMongo 4.14 and callers may be on an older version:
 
@@ -256,7 +256,7 @@ glob: **/*.rb
 
 Common locations: `lib/<gem-name>/version.rb`, then referenced as `MyLib::VERSION` or just `VERSION`.
 
-### Pattern A — Library constructs the client
+### Library constructs the client
 
 Ruby has no `appendMetadata` post-construction API. Metadata must be passed to the constructor as the `wrapping_libraries:` option.
 
@@ -284,7 +284,7 @@ client = Mongo::Client.new(addresses_or_uri, options)
 
 Define the constant at class/module level, not inside the method.
 
-### Pattern B — Caller passes an existing client
+### Caller passes an existing client
 
 The Ruby driver does not expose a public `append_metadata`-style API for existing client instances. For this pattern, document in code comments that the library cannot add metadata to externally-created clients, and recommend users pass the `wrapping_libraries` option when constructing their client.
 
@@ -365,7 +365,7 @@ internal static class BuildInfo
 }
 ```
 
-### Pattern A — Library constructs the client via MongoClientSettings
+### Library constructs the client via MongoClientSettings
 
 **Before:**
 ```csharp
@@ -395,7 +395,7 @@ var client = new MongoClient(settings);
 
 `LibraryInfo` is available in the C# driver ≥ 2.20.0. There is no post-construction append API in C#.
 
-### Pattern B — Caller passes an existing client
+### Caller passes an existing client
 
 The C# driver does not expose a public `appendMetadata` API for existing client instances. `MongoClientSettings` is frozen by the driver on `new MongoClient(settings)`, so `client.Settings.LibraryInfo` throws after construction. Document this in code comments: metadata must be set at construction time via `MongoClientSettings.LibraryInfo`. Recommend callers configure this themselves, and optionally provide a helper:
 ```csharp
@@ -474,7 +474,7 @@ String version = MyLibClass.class.getPackage().getImplementationVersion();
 
 Or reference an existing version constant already in the codebase (search for `VERSION` or `getVersionString()`).
 
-### Pattern A — Library constructs the client
+### Library constructs the client
 
 Define a static constant and pass it as the second argument to `MongoClients.create()`. This works for both sync and reactive clients:
 
@@ -504,7 +504,7 @@ new MongoClient(serverAddresses, credential, clientOptions,
         .build());
 ```
 
-### Pattern B — Caller passes an existing client
+### Caller passes an existing client
 
 `MongoClient.appendMetadata()` was added in Java driver 5.6.0. Always use reflection to guard the call so the library works with older driver versions:
 
@@ -580,7 +580,7 @@ Use the `env!` macro — resolved at compile time from `Cargo.toml`, always accu
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 ```
 
-### Pattern A — Library constructs the client
+### Library constructs the client
 
 The library calls `ClientOptions::parse` and `Client::with_options` itself.
 
@@ -610,7 +610,7 @@ pub async fn create_client(uri: &str) -> Result<Client, mongodb::error::Error> {
 
 Define `DRIVER_NAME` as a module-level constant. `version` is optional but recommended when set via `env!`.
 
-### Pattern B — Caller passes an existing client
+### Caller passes an existing client
 
 The Rust mongodb driver has no post-construction metadata API — `driver_info` must be set on `ClientOptions` before `Client::with_options` is called. You cannot mutate a `Client` after construction.
 
@@ -670,16 +670,204 @@ cargo test
 
 ---
 
-## Cross-language: Handling mixed patterns in one file
+## C++
 
-Some files have both Pattern A and Pattern B — e.g., an optional `client` parameter where the library falls back to constructing its own:
+Requires mongo-cxx-driver ≥ 4.5.0 (CXX-3274). Unlike the other languages here, mongocxx has no construction-time metadata field — there is only one API, `append_metadata`, and both integration approaches call it; they differ only in *where* it's called.
+
+### Grep patterns
+
+```
+# Find mongocxx::client / mongocxx::pool constructions
+pattern: mongocxx::(client|pool)\s*\{|\bnew\s+mongocxx::(client|pool)\(
+glob: **/*.{cpp,cc,cxx,hpp,h}
+
+# Find append_metadata calls (already done?)
+pattern: append_metadata
+glob: **/*.{cpp,cc,cxx,hpp,h}
+```
+
+Exclude: `build/`, `cmake-build-*/`, `**/test/`, `**/tests/` (check tests separately).
+
+### Version resolution
+
+Prefer a version already exposed by the project's own build (a CMake-configured header, `PROJECT_VERSION`, or an existing version constant). If none exists, a hardcoded string with a comment noting where to keep it in sync (e.g. next to the `project(... VERSION x.y.z)` line in `CMakeLists.txt`) is acceptable — C++ builds are typically version-pinned rather than resolved at runtime.
+
+### Library constructs the client
+
+`append_metadata` is a post-construction call, so append it immediately after construction — a lambda initializer keeps this in the member-initializer list without a second statement:
+
+**Before:**
+```cpp
+mongocxx::client client{uri};
+```
+
+**After:**
+```cpp
+mongocxx::client client{[&uri]
+    {
+        mongocxx::client c{uri};
+        c.append_metadata("LibraryName", LIBRARY_VERSION);
+        return c;
+    }()};
+```
+
+Give the lambda-local variable a name distinct from any enclosing member named `client` — clang-tidy's `-Wshadow-uncaptured-local` (common in `-Werror` builds) flags a lambda-local that shadows a class member of the same name.
+
+If the constructor body runs before any operation touches the server, a plain statement after construction works too and is simpler when there's no member-initializer-list constraint:
+```cpp
+mongocxx::client client{uri};
+client.append_metadata("LibraryName", LIBRARY_VERSION);
+```
+
+The same API and pattern apply to `mongocxx::pool`.
+
+`append_metadata` throws `mongocxx::exception` (or `mongocxx::operation_exception` under the stable ABI) if the resulting handshake document would exceed the size limit, or if a `name`/`version`/`platform` argument contains the literal substring `" / "` (the driver's own delimiter). Let it propagate unless the surrounding code already has a broader exception-handling convention to fold it into.
+
+### Caller passes an existing client
+
+Call `append_metadata` on the received `mongocxx::client&` or `mongocxx::pool&` reference at the earliest point the library takes ownership or first uses it:
+
+```cpp
+void MyLib::attach(mongocxx::client& client) {
+    client.append_metadata("LibraryName", LIBRARY_VERSION);
+    _client = &client;
+}
+```
+
+There is no availability guard needed comparable to other languages' `hasattr`/reflection checks: `append_metadata` is a compile-time API, so if the project builds against mongocxx ≥ 4.5.0 the symbol is always present. If the project must support both older and newer driver versions, guard with the driver's version macros instead:
+```cpp
+#include <mongocxx/config/version.hpp>
+
+#if MONGOCXX_VERSION_MAJOR > 4 || (MONGOCXX_VERSION_MAJOR == 4 && MONGOCXX_VERSION_MINOR >= 5)
+    client.append_metadata("LibraryName", LIBRARY_VERSION);
+#endif
+```
+
+### Testing (C++)
+
+Look under `test/`, `tests/`, or files matching `*_test.cpp`/`*Test.cpp`. Search for tests that construct `mongocxx::client` or `mongocxx::pool`.
+
+Propose a test that verifies metadata is appended without throwing (most test suites don't have a way to inspect the outgoing handshake document directly, so the test typically just confirms the call site is exercised and doesn't throw):
+
+```cpp
+TEST_CASE("MongoDB client sets library metadata") {
+    mongocxx::instance instance{};
+    mongocxx::uri uri{"mongodb://localhost/?connectTimeoutMS=1"};
+    REQUIRE_NOTHROW(my_lib::create_client(uri));
+}
+```
+
+**Local test run:**
+```bash
+cd projects/<name>
+cmake --preset default   # or the project's documented configure step
+cmake --build build --target test
+```
+
+---
+
+## C
+
+Requires mongo-c-driver (libmongoc) ≥ 2.3.0. As with C++, there is a single post-construction API — `mongoc_client_append_metadata` / `mongoc_client_pool_append_metadata` — used by both integration approaches; there is no construction-time metadata field.
+
+### Grep patterns
+
+```
+# Find mongoc_client_new / mongoc_client_pool_new constructions
+pattern: mongoc_client(_pool)?_new\s*\(
+glob: **/*.{c,h}
+
+# Find append_metadata calls (already done?)
+pattern: mongoc_client(_pool)?_append_metadata
+glob: **/*.{c,h}
+```
+
+Exclude: `build/`, `cmake-build-*/`, `test/`, `tests/` (check tests separately).
+
+### Version resolution
+
+Same as C++: prefer a version already generated by the build (an autoconf/CMake-configured header or existing `PACKAGE_VERSION`-style macro). Otherwise a hardcoded string kept next to the build's version declaration is acceptable.
+
+### Library constructs the client
+
+**Before:**
+```c
+mongoc_client_t *client = mongoc_client_new_from_uri(uri);
+```
+
+**After:**
+```c
+mongoc_client_t *client = mongoc_client_new_from_uri(uri);
+if (client) {
+    mongoc_client_append_metadata(client, "LibraryName", LIBRARY_VERSION, NULL);
+}
+```
+
+For pooled clients:
+```c
+mongoc_client_pool_t *pool = mongoc_client_pool_new(uri);
+mongoc_client_pool_append_metadata(pool, "LibraryName", LIBRARY_VERSION, NULL);
+```
+
+`mongoc_client_append_metadata`/`mongoc_client_pool_append_metadata` return `bool` and log an error rather than aborting on failure (e.g. the resulting handshake document would exceed the size limit, or a `name`/`version`/`platform` argument contains the literal substring `" / "`). Check the return value if the project has a convention of propagating driver errors; otherwise logging is the driver's own fallback and no additional handling is required.
+
+### Caller passes an existing client
+
+Call the same API on the received `mongoc_client_t *` or `mongoc_client_pool_t *` at the earliest point the library takes ownership or first uses it:
+
+```c
+void my_lib_attach(mongoc_client_t *client) {
+    mongoc_client_append_metadata(client, "LibraryName", LIBRARY_VERSION, NULL);
+}
+```
+
+If a `mongoc_client_t *` obtained from `mongoc_client_pool_pop` is passed in, call `mongoc_client_pool_append_metadata` on the *pool* instead — `mongoc_client_append_metadata` explicitly rejects (returns `false`, logs an error) clients checked out from a pool.
+
+No runtime availability guard is needed if the project's build requires mongo-c-driver ≥ 2.3.0. To support older driver versions in the same codebase, guard with the driver's version macro instead:
+```c
+#include <mongoc/mongoc-version.h>
+
+#if MONGOC_CHECK_VERSION(2, 3, 0)
+    mongoc_client_append_metadata(client, "LibraryName", LIBRARY_VERSION, NULL);
+#endif
+```
+
+### Testing (C)
+
+Look under `tests/` or files matching `test-*.c`. Search for tests that call `mongoc_client_new*` or `mongoc_client_pool_new*`.
+
+Propose a test that verifies the call succeeds:
+
+```c
+static void
+test_my_lib_sets_metadata (void) {
+   mongoc_client_t *client = mongoc_client_new ("mongodb://localhost/?connectTimeoutMS=1");
+   my_lib_attach (client);
+   /* No public API exposes the outgoing handshake document for inspection;
+      asserting the call doesn't abort is the achievable coverage here. */
+   mongoc_client_destroy (client);
+}
+```
+
+**Local test run:**
+```bash
+cd projects/<name>
+cmake --preset default   # or the project's documented configure step
+cmake --build build --target test
+```
+
+---
+
+## Cross-language: Handling both integration approaches in one file
+
+Some files construct their own client in one branch and accept a caller-supplied client in another — e.g., an optional `client` parameter where the library falls back to constructing its own:
 
 ```python
 def __init__(self, client: MongoClient = None):
     if client is None:
-        self._client = MongoClient(uri, driver=_DRIVER_INFO)  # Pattern A
+        self._client = MongoClient(uri, driver=_DRIVER_INFO)  # library constructs the client
     else:
-        if hasattr(client, 'append_metadata'):                 # Pattern B
+        if hasattr(client, 'append_metadata'):                 # caller passed an existing client
             client.append_metadata(_DRIVER_INFO)
         self._client = client
 ```

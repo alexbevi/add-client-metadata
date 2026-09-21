@@ -4,7 +4,7 @@ description: >
   Add MongoDB driver handshake metadata to a third-party library that uses MongoClient.
   Use when the user invokes "add-client-metadata <repo-url>" or asks to add MongoDB client
   metadata, driver info, or handshake metadata to a library or GitHub repository.
-version: 0.4.0
+version: 0.5.0
 ---
 
 # Add MongoDB Client Metadata
@@ -39,6 +39,8 @@ Search the repo on GitHub (or via the raw URL) for existing driver metadata. If 
 - C#: `LibraryInfo`
 - Java/Kotlin: `MongoDriverInformation`
 - Rust: `DriverInfo::builder`
+- C++: `append_metadata` on a `mongocxx::client`/`mongocxx::pool`
+- C: `mongoc_client_append_metadata` or `mongoc_client_pool_append_metadata`
 
 Also check for commented-out driver code (e.g. `# driver=DriverInfo(...)`, `// driver=...`). If found, note it — the implementation may just need to be uncommented and imports added rather than written from scratch.
 
@@ -80,8 +82,10 @@ Check for the presence of these files in `projects/<name>/`:
 | `*.csproj` or `*.sln` | C# |
 | `pom.xml` or `build.gradle` or `build.gradle.kts` | Java / Kotlin |
 | `Cargo.toml` | Rust |
+| `CMakeLists.txt` or `conanfile.txt`/`conanfile.py` linking `mongocxx` | C++ |
+| `CMakeLists.txt` or a vcpkg/Conan manifest linking `mongoc`/`libmongoc` (no `mongocxx`) | C |
 
-A repo may mix languages. Apply changes in all relevant language contexts.
+A repo may mix languages. Apply changes in all relevant language contexts. If a build links both `mongoc` and `mongocxx`, treat it as C++ — `mongocxx` wraps `mongoc`, and metadata should be appended once via the C++ API rather than duplicated at both layers.
 
 ### Step 4 — Identify library name and version
 
@@ -92,6 +96,7 @@ A repo may mix languages. Apply changes in all relevant language contexts.
 - C#: `<AssemblyName>` or `<PackageId>` from `.csproj`
 - Java/Kotlin: `artifactId` from `pom.xml` or `rootProject.name` from `settings.gradle`
 - Rust: `name` field in `Cargo.toml` under `[package]`
+- C++/C: `project(...)` name in `CMakeLists.txt`, or the package `name` in a Conan/vcpkg manifest
 
 Capitalize the library name sensibly for display (e.g. `langchain-mongodb` → `"Langchain"`, `beanie` → `"Beanie"`, `typeorm` → `"TypeORM"`). Check whether the existing codebase has a display-name constant already; if so, use it.
 
@@ -99,7 +104,7 @@ Capitalize the library name sensibly for display (e.g. `langchain-mongodb` → `
 
 ### Step 5 — Scan for MongoClient integration points
 
-Use Grep to find all `MongoClient` construction and usage sites. Consult `references/language-patterns.md` for per-language grep patterns and file globs. For Rust, search for `ClientOptions::parse` and `Client::with_options`.
+Use Grep to find all `MongoClient` construction and usage sites. Consult `references/language-patterns.md` for per-language grep patterns and file globs. For Rust, search for `ClientOptions::parse` and `Client::with_options`. For C++, search for `mongocxx::client` and `mongocxx::pool` construction. For C, search for `mongoc_client_new` and `mongoc_client_pool_new`.
 
 For each hit, determine which integration approach applies:
 
@@ -113,7 +118,9 @@ A single library may use both approaches (e.g. it accepts an optional existing c
 
 **Python async note:** Motor's `AsyncIOMotorClient` does not support the `driver=` parameter — only inject on PyMongo's `MongoClient` and `AsyncMongoClient`. If a codebase uses both Motor and PyMongo async clients, inject only on the PyMongo async path.
 
-> **Note:** "Pattern A" and "Pattern B" are internal shorthand used in this skill for clarity. Do not use this language in code comments, commit messages, or PR descriptions — it is jargon that means nothing to the library maintainer.
+**C++ / C note:** `mongocxx`/`mongoc` have no construction-time metadata field — both integration approaches call the same post-construction `append_metadata` API (on `mongocxx::client`/`mongocxx::pool`, or `mongoc_client_append_metadata`/`mongoc_client_pool_append_metadata`). The only difference between the two approaches is *where* the call happens: immediately after the library's own constructor call, versus in the caller-supplied-client's init path.
+
+Throughout this skill, refer to these two cases by their plain descriptions ("library constructs the client" / "caller passes an existing client") — do not invent internal shorthand like letter- or number-coded pattern names. Code comments, commit messages, and PR descriptions must describe behavior in terms the library maintainer will recognize, not skill-internal jargon.
 
 ### Step 6 — Apply code changes
 
@@ -197,7 +204,7 @@ feat: add MongoDB driver handshake metadata
 
 1. **Summary** — One paragraph explaining what the change does and why it matters. Frame it from the perspective of value to the maintainer and their users: server-side visibility, easier debugging, MongoDB Atlas integration.
 
-2. **What changes** — A brief description of each modified file: whether the library constructs its own client (and `driverInfo` was injected into the constructor) or receives one from the caller (and `appendMetadata` was called), including the guard strategy. Do not use "Pattern A / B" terminology — describe the behaviour in plain terms.
+2. **What changes** — A brief description of each modified file: whether the library constructs its own client (and `driverInfo` was injected into the constructor) or receives one from the caller (and `appendMetadata` was called), including the guard strategy. Describe the behavior in plain terms, not internal skill jargon.
 
 3. **How it appears in the logs** — Include both the raw metadata dict and a realistic `mongod` log line. Generate the metadata by constructing a no-connect client:
 
@@ -218,6 +225,8 @@ feat: add MongoDB driver handshake metadata
    **JS/TS:** describe the `nodejs|LibraryName` pattern and note the `driver.name` and `driver.version` fields.
 
    **Rust:** describe the `driver_info` field on `ClientOptions` set via `DriverInfo::builder().name("LibraryName").build()`, and note that the handshake document will include the library name under the `driver` field alongside the `mongodb` Rust driver info.
+
+   **C++ / C:** describe the `append_metadata("LibraryName", version)` call on the `mongocxx::client`/`mongocxx::pool` (or `mongoc_client_append_metadata`/`mongoc_client_pool_append_metadata`), and note that the handshake `driver.name`/`driver.version` fields become slash-delimited (e.g. `"mongoc / mongocxx / LibraryName"`), matching the wrapping-library convention other drivers use.
 
 4. **Spec reference** — Link to the MongoDB handshake specification:
    ```
