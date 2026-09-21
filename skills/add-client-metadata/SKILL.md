@@ -5,6 +5,7 @@ description: >
   Use when the user invokes "add-client-metadata <repo-url>" or asks to add MongoDB client
   metadata, driver info, or handshake metadata to a library or GitHub repository.
 argument-hint: <github-repo-url>
+allowed-tools: Bash, Read, Edit, Write, Grep, Glob, WebFetch, AskUserQuestion
 version: 0.5.0
 ---
 
