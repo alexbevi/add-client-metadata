@@ -1,7 +1,7 @@
 {
   "name": "add-client-metadata",
-  "version": "0.1.0",
-  "description": "Add MongoDB client metadata (driver handshake info) to libraries that use MongoClient, supporting Python, JavaScript/TypeScript, Ruby, and C#.",
+  "version": "0.5.0",
+  "description": "Add MongoDB client metadata (driver handshake info) to libraries that use MongoClient, supporting Python, JavaScript/TypeScript, Ruby, C#, Java/Kotlin, Rust, C++, and C.",
   "author": {
     "name": "Alex"
   }
