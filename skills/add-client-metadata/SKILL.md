@@ -4,6 +4,7 @@ description: >
   Add MongoDB driver handshake metadata to a third-party library that uses MongoClient.
   Use when the user invokes "add-client-metadata <repo-url>" or asks to add MongoDB client
   metadata, driver info, or handshake metadata to a library or GitHub repository.
+argument-hint: <github-repo-url>
 version: 0.5.0
 ---
 
